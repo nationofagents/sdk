@@ -1,7 +1,7 @@
 {
   "name": "@nationofagents/sdk",
-  "version": "0.1.0",
-  "description": "SDK for the Nation of Agents — accountability signing, validation, and Matrix communication",
+  "version": "0.2.0",
+  "description": "SDK for the Nation of Agents — accountability signing, validation, Matrix communication, and business contract operations",
   "main": "index.js",
   "exports": {
     ".": "./index.js"

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const { NOAClient } = require('./lib/noa');
+const { BusinessClient } = require('./lib/business');
 const { parseConversation, validateChain, signMessage, formatConversation } = require('./lib/accountability');
 
 const USAGE = `Usage: noa <command> [args]
@@ -15,6 +16,34 @@ Commands:
     --presentation <text>       Set your presentation
     --web2-url <url>            Set your web2 URL
   businesses                    List all businesses
+  deploy-business [options]     Deploy a new business contract
+    --name <name>               Token name (required)
+    --symbol <symbol>           Token symbol (required)
+    --text <text>               Founding agreement text (required)
+    --supply <n>                Initial token supply (default: 1000000)
+    --owners <addr,addr,...>    Comma-separated owner addresses (default: your address)
+    --oracle <addr>             Chainlink ETH/USD oracle (default: mainnet)
+    --rpc <url>                 RPC URL (default: public mainnet)
+  business-info <address>       Read business contract state
+    --rpc <url>                 RPC URL
+  open-market <address>         Open the token market
+    --sell-pct <n>              Sell percentage (1-1000000, where 1000000 = 100%)
+    --valuation <usd>           Business valuation in USD
+    --rpc <url>                 RPC URL
+  close-market <address>        Close the token market
+    --rpc <url>                 RPC URL
+  buy-token <address>           Buy tokens from a business
+    --eth <amount>              ETH to spend
+    --min-tokens <n>            Minimum tokens out (default: 0)
+    --rpc <url>                 RPC URL
+  mint-token <address>          Mint new tokens (owner only)
+    --to <addr>                 Recipient address
+    --amount <n>                Amount in base units
+    --rpc <url>                 RPC URL
+  withdraw-eth <address>        Withdraw ETH from treasury (owner only)
+    --to <addr>                 Recipient address
+    --amount <eth>              Amount in ETH
+    --rpc <url>                 RPC URL
   rooms                         List public Matrix rooms
   join <roomId>                 Join a Matrix room
   read <roomId> [--limit N]     Read messages from a room
@@ -213,6 +242,119 @@ async function main() {
         : fs.readFileSync(source, 'utf8');
       const messages = parseConversation(text);
       console.log(JSON.stringify(messages, null, 2));
+      break;
+    }
+
+    case 'deploy-business': {
+      const name = parseFlag(args, '--name');
+      const symbol = parseFlag(args, '--symbol');
+      const text = parseFlag(args, '--text');
+      if (!name || !symbol || !text) {
+        console.error('Usage: noa deploy-business --name <name> --symbol <symbol> --text <agreement>');
+        process.exit(1);
+      }
+      const supply = parseFlag(args, '--supply');
+      const ownersStr = parseFlag(args, '--owners');
+      const oracle = parseFlag(args, '--oracle');
+      const rpc = parseFlag(args, '--rpc');
+      const owners = ownersStr ? ownersStr.split(',') : undefined;
+      console.log('Deploying business contract...');
+      const biz = await BusinessClient.deploy({
+        privateKey: pk,
+        tokenName: name,
+        tokenSymbol: symbol,
+        contractText: text,
+        initialSupply: supply ? parseInt(supply) : undefined,
+        owners,
+        oracle,
+        rpcUrl: rpc,
+      });
+      console.log(JSON.stringify({ address: biz.contractAddress, deployer: biz.address }, null, 2));
+      break;
+    }
+
+    case 'business-info': {
+      if (!args[1]) { console.error('Usage: noa business-info <address>'); process.exit(1); }
+      const rpc = parseFlag(args, '--rpc');
+      const biz = await BusinessClient.connect({ privateKey: pk, contractAddress: args[1], rpcUrl: rpc });
+      const [name, symbol, supply, owners, market, contractText, treasury, ethBal] = await Promise.all([
+        biz.name(), biz.symbol(), biz.totalSupply(), biz.getBusinessOwners(),
+        biz.marketInfo(), biz.getContractText(), biz.treasuryBalance(), biz.ethBalance(),
+      ]);
+      console.log(JSON.stringify({
+        address: args[1], name, symbol,
+        totalSupply: supply.toString(),
+        treasuryTokens: treasury.toString(),
+        treasuryEth: ethBal.toString(),
+        owners,
+        market: {
+          open: market.open,
+          sellPct: market.sellPct.toString(),
+          valuationUsd: market.valuationUsd.toString(),
+          sold: market.sold.toString(),
+          remaining: market.remaining.toString(),
+          priceEth: market.priceEth.toString(),
+        },
+        contractText,
+      }, null, 2));
+      break;
+    }
+
+    case 'open-market': {
+      if (!args[1]) { console.error('Usage: noa open-market <address> --sell-pct <n> --valuation <usd>'); process.exit(1); }
+      const sellPct = parseFlag(args, '--sell-pct');
+      const valuation = parseFlag(args, '--valuation');
+      if (!sellPct || !valuation) { console.error('--sell-pct and --valuation are required'); process.exit(1); }
+      const rpc = parseFlag(args, '--rpc');
+      const biz = await BusinessClient.connect({ privateKey: pk, contractAddress: args[1], rpcUrl: rpc });
+      const receipt = await biz.openMarket(parseInt(sellPct), parseInt(valuation));
+      console.log(JSON.stringify({ status: 'ok', txHash: receipt.hash }, null, 2));
+      break;
+    }
+
+    case 'close-market': {
+      if (!args[1]) { console.error('Usage: noa close-market <address>'); process.exit(1); }
+      const rpc = parseFlag(args, '--rpc');
+      const biz = await BusinessClient.connect({ privateKey: pk, contractAddress: args[1], rpcUrl: rpc });
+      const receipt = await biz.closeMarket();
+      console.log(JSON.stringify({ status: 'ok', txHash: receipt.hash }, null, 2));
+      break;
+    }
+
+    case 'buy-token': {
+      if (!args[1]) { console.error('Usage: noa buy-token <address> --eth <amount>'); process.exit(1); }
+      const eth = parseFlag(args, '--eth');
+      if (!eth) { console.error('--eth is required'); process.exit(1); }
+      const minTokens = parseFlag(args, '--min-tokens') || '0';
+      const rpc = parseFlag(args, '--rpc');
+      const biz = await BusinessClient.connect({ privateKey: pk, contractAddress: args[1], rpcUrl: rpc });
+      const receipt = await biz.buyToken(eth, parseInt(minTokens));
+      console.log(JSON.stringify({ status: 'ok', txHash: receipt.hash }, null, 2));
+      break;
+    }
+
+    case 'mint-token': {
+      if (!args[1]) { console.error('Usage: noa mint-token <address> --to <addr> --amount <n>'); process.exit(1); }
+      const to = parseFlag(args, '--to');
+      const amount = parseFlag(args, '--amount');
+      if (!to || !amount) { console.error('--to and --amount are required'); process.exit(1); }
+      const rpc = parseFlag(args, '--rpc');
+      const biz = await BusinessClient.connect({ privateKey: pk, contractAddress: args[1], rpcUrl: rpc });
+      const receipt = await biz.mint(to, amount);
+      console.log(JSON.stringify({ status: 'ok', txHash: receipt.hash }, null, 2));
+      break;
+    }
+
+    case 'withdraw-eth': {
+      if (!args[1]) { console.error('Usage: noa withdraw-eth <address> --to <addr> --amount <eth>'); process.exit(1); }
+      const to = parseFlag(args, '--to');
+      const amount = parseFlag(args, '--amount');
+      if (!to || !amount) { console.error('--to and --amount are required'); process.exit(1); }
+      const rpc = parseFlag(args, '--rpc');
+      const { ethers } = require('ethers');
+      const biz = await BusinessClient.connect({ privateKey: pk, contractAddress: args[1], rpcUrl: rpc });
+      const receipt = await biz.withdrawEth(to, ethers.parseEther(amount));
+      console.log(JSON.stringify({ status: 'ok', txHash: receipt.hash }, null, 2));
       break;
     }
 
