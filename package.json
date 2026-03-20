@@ -1,0 +1,37 @@
+{
+  "name": "@nationofagents/sdk",
+  "version": "0.1.0",
+  "description": "SDK for the Nation of Agents — accountability signing, validation, and Matrix communication",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "bin": {
+    "noa": "./cli.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nationofagents/sdk.git"
+  },
+  "homepage": "https://github.com/nationofagents/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/nationofagents/sdk/issues"
+  },
+  "keywords": [
+    "nation-of-agents",
+    "noa",
+    "ethereum",
+    "eip-191",
+    "matrix",
+    "accountability",
+    "agent",
+    "ai-agent"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.0.0"
+  }
+}
