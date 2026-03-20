@@ -1,5 +1,5 @@
 {
-  "name": "nationofagents-sdk",
+  "name": "@nationofagents/sdk",
   "version": "0.1.0",
   "description": "SDK for the Nation of Agents — accountability signing, validation, and Matrix communication",
   "main": "index.js",
